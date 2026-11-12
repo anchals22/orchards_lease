@@ -20,6 +20,7 @@ import { ChevronLeft, ChevronRight, MapPin, Star, Trees, Leaf } from 'lucide-rea
 import { cn } from '@/lib/cn';
 import { formatCurrency } from '@/lib/format';
 import { orchardSurface } from '@/lib/gradients';
+import { Button } from '@/components/ui';
 import type { Orchard } from '@/types';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -220,6 +221,10 @@ interface TopRatedSliderProps {
   isLoading?: boolean;
   /** Number of skeleton cards to show while loading */
   skeletonCount?: number;
+  /** Fetch error, when the list could not be loaded */
+  error?: string | null;
+  /** Retry loading the list */
+  onRetry?: () => void;
 }
 
 export function TopRatedSlider({
@@ -229,6 +234,8 @@ export function TopRatedSlider({
   maxItems = 12,
   isLoading = false,
   skeletonCount = 4,
+  error = null,
+  onRetry,
 }: TopRatedSliderProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -298,7 +305,18 @@ export function TopRatedSlider({
         <SectionHeader title={title} subtitle={subtitle} />
         <div className="mt-8 flex flex-col items-center gap-3 rounded-2xl border border-dashed border-sand bg-cream py-14 text-center">
           <span className="text-4xl">🌳</span>
-          <p className="text-sm text-faint">No rated orchards yet. Check back soon!</p>
+          {error ? (
+            <>
+              <p role="alert" className="text-sm text-sub">{error}</p>
+              {onRetry && (
+                <Button size="sm" variant="outline" onClick={onRetry}>
+                  Try again
+                </Button>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-faint">No rated orchards yet. Check back soon!</p>
+          )}
         </div>
       </section>
     );

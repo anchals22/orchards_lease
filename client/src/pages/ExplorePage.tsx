@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   ChevronDown,
@@ -24,6 +24,7 @@ import { useLocation } from '@/context/LocationContext';
 import { formatCurrency } from '@/lib/format';
 import { orchardSurface } from '@/lib/gradients';
 import { cn } from '@/lib/cn';
+import { getErrorMessage } from '@/lib/apiClient';
 import type { Orchard, FilterOptions, PageMeta, RecommendationItem } from '@/types';
 
 
@@ -146,11 +147,14 @@ export default function ExplorePage() {
   const [options, setOptions] = useState<FilterOptions | null>(null);
   const [recent, setRecent] = useState<Orchard[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const loadRequestId = useRef(0);
   const [mobileFilters, setMobileFilters] = useState(false);
   const [showAllAmenities, setShowAllAmenities] = useState(false);
 
   const [topRated, setTopRated] = useState<Orchard[]>([]);
   const [topRatedLoading, setTopRatedLoading] = useState(true);
+  const [topRatedError, setTopRatedError] = useState<string | null>(null);
 
   const [recommendations, setRecommendations] = useState<RecommendationItem[]>([]);
   const [recommendationsLoading, setRecommendationsLoading] = useState(true);
@@ -199,17 +203,24 @@ export default function ExplorePage() {
     }
   }, [user]);
 
-  useEffect(() => {
+  const loadTopRated = useCallback(() => {
     setTopRatedLoading(true);
+    setTopRatedError(null);
     orchardService
       .list({ sort: 'rating', limit: 12, page: 1 } as OrchardFilters & { limit?: number })
       .then((res) => setTopRated(res.data))
-      .catch(() => {})
+      .catch(() => setTopRatedError('Unable to load top-rated orchards.'))
       .finally(() => setTopRatedLoading(false));
   }, []);
 
+  useEffect(() => {
+    loadTopRated();
+  }, [loadTopRated]);
+
   const load = useCallback(async () => {
+    const requestId = ++loadRequestId.current;
     setLoading(true);
+    setLoadError(null);
     const sortVal = params.get('sort') || 'newest';
     const filters: OrchardFilters = {
       search:    params.get('search')    ?? undefined,
@@ -231,10 +242,15 @@ export default function ExplorePage() {
     };
     try {
       const res = await orchardService.list(filters);
+      if (requestId !== loadRequestId.current) return;
       setOrchards(res.data);
       setMeta(res.meta ?? null);
+    } catch (err) {
+      if (requestId === loadRequestId.current) {
+        setLoadError(getErrorMessage(err));
+      }
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestId.current) setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
@@ -335,6 +351,8 @@ export default function ExplorePage() {
         <TopRatedSlider
           orchards={topRated}
           isLoading={topRatedLoading}
+          error={topRatedError}
+          onRetry={loadTopRated}
           title="Top Rated Orchards"
           subtitle="Community favourites — sorted by verified guest ratings."
           maxItems={12}
@@ -668,7 +686,15 @@ export default function ExplorePage() {
             {/* Toolbar */}
             <div className="mb-[18px] flex flex-wrap items-center justify-between gap-3.5">
               <span className="text-sm text-sub">
-                <b className="text-base text-ink">{displayOrchards.length}</b> orchards available
+                {loading ? (
+                  'Loading orchards…'
+                ) : loadError ? (
+                  'Orchard listings are temporarily unavailable'
+                ) : (
+                  <>
+                    <b className="text-base text-ink">{displayOrchards.length}</b> orchards available
+                  </>
+                )}
               </span>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" className="lg:hidden" onClick={() => setMobileFilters(true)}>
@@ -764,6 +790,19 @@ export default function ExplorePage() {
             {loading ? (
               <div className="grid grid-cols-[repeat(auto-fill,minmax(258px,1fr))] gap-5">
                 {Array.from({ length: 6 }).map((_, i) => <OrchardCardSkeleton key={i} />)}
+              </div>
+            ) : loadError ? (
+              <div
+                role="alert"
+                className="rounded-2xl border border-terra/30 bg-terra/5 px-5 py-10 text-center"
+              >
+                <h3 className="font-serif text-lg font-semibold text-ink">
+                  Could not load orchard listings
+                </h3>
+                <p className="mx-auto mt-2 max-w-lg text-sm text-sub">{loadError}</p>
+                <Button className="mt-4" onClick={() => void load()}>
+                  Try again
+                </Button>
               </div>
             ) : displayOrchards.length === 0 ? (
               <EmptyState
